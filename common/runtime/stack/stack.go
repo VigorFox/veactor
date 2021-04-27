@@ -1,6 +1,7 @@
 // Description: stack/stack.go will print the call stack information
 // Author: ZHU HAIHUA
 // Since: 2016-03-02 10:58
+// see https://github.com/kimiazhu/golib/blob/master/stack/stack.go
 package stack
 
 import (
