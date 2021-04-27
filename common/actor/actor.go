@@ -133,7 +133,7 @@ type Message struct {
 
 type IMessageProcessor interface {
 	ProcessMessage(*Message)
-	Update()
+	Update(time.Time)
 	Cleanup()
 }
 
@@ -146,7 +146,7 @@ func (d *DefaultMessageProcessor) ProcessMessage(msg *Message) {
 	}
 }
 
-func (d *DefaultMessageProcessor) Update() {
+func (d *DefaultMessageProcessor) Update(time.Time) {
 }
 
 func (d *DefaultMessageProcessor) Cleanup() {
@@ -157,16 +157,17 @@ var defaultMessageProcessor = &DefaultMessageProcessor{}
 const checkInterval = time.Second / 30
 
 type Actor struct {
-	goroutineID      int64
-	lockOSThread     bool
-	mailbox          *mpsc.Queue
-	messageProcessor IMessageProcessor
-	isRunnning       uint32
-	isClosing        uint32
-	startTime        time.Time
-	lastActiveTime   time.Time
-	timerIDCounter   int64
-	tl               *timerList
+	goroutineID          int64
+	lockOSThread         bool
+	mailbox              *mpsc.Queue
+	messageProcessor     IMessageProcessor
+	isRunnning           uint32
+	isClosing            uint32
+	startTime            time.Time
+	lastActiveUpdateTime time.Time
+	lastActiveTime       time.Time
+	timerIDCounter       int64
+	tl                   *timerList
 
 	// channels
 	timerNotify         chan int
@@ -185,6 +186,7 @@ func NewActor(isLockOSThread bool) *Actor {
 		nil,
 		0,
 		0,
+		time.Date(1970, 1, 1, 0, 0, 0, 0, time.Local),
 		time.Date(1970, 1, 1, 0, 0, 0, 0, time.Local),
 		time.Date(1970, 1, 1, 0, 0, 0, 0, time.Local),
 		0,
@@ -315,6 +317,7 @@ func (a *Actor) run() {
 		select {
 		case <-a.timerNotify:
 			a.lastActiveTime = time.Now()
+			a.lastActiveUpdateTime = a.lastActiveTime
 			a.updateSafe()
 			popAndProcessAllMsg()
 		case <-a.mailNotify:
@@ -376,9 +379,9 @@ func (a *Actor) updateSafe() {
 	}()
 
 	if a.messageProcessor != nil {
-		a.messageProcessor.Update()
+		a.messageProcessor.Update(a.lastActiveUpdateTime)
 	} else {
-		defaultMessageProcessor.Update()
+		defaultMessageProcessor.Update(a.lastActiveUpdateTime)
 	}
 	a.checkTimers()
 }
