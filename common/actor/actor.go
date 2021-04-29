@@ -278,7 +278,7 @@ func (a *Actor) checkTimers() {
 
 func (a *Actor) runTimerThread() {
 	timerTicker := time.NewTicker(checkInterval)
-
+	defer timerTicker.Stop()
 	for a.isRunnning > 0 {
 		<-timerTicker.C
 		select {
