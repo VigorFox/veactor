@@ -17,9 +17,9 @@ func TestActorCreateAndStop(t *testing.T) {
 
 		msg := fmt.Sprintf("Actor %d is Running", i)
 		a.PostAndProcessMessage(
-			func(args ...interface{}) {
+			func(arg interface{}) {
 				t.Logf(msg)
-			})
+			}, nil)
 
 		actorSlice = append(actorSlice, a)
 	}
@@ -42,27 +42,27 @@ func TestActorProcessingPower(t *testing.T) {
 	var f1 ProcessMessageFunc
 	var f2 ProcessMessageFunc
 	counter1 := 0
-	f1 = func(args ...interface{}) {
+	f1 = func(arg interface{}) {
 		counter1++
 		// 交叉投递消息
-		err := testActor2.PostAndProcessMessage(f2)
+		err := testActor2.PostAndProcessMessage(f2, nil)
 		if err != nil {
 			t.Logf(err.Error())
 		}
 	}
 
 	counter2 := 0
-	f2 = func(args ...interface{}) {
+	f2 = func(arg interface{}) {
 		counter2++
 		// 交叉投递消息
-		err := testActor1.PostAndProcessMessage(f1)
+		err := testActor1.PostAndProcessMessage(f1, nil)
 		if err != nil {
 			t.Logf(err.Error())
 		}
 	}
 
-	testActor1.PostAndProcessMessage(f1)
-	testActor2.PostAndProcessMessage(f2)
+	testActor1.PostAndProcessMessage(f1, nil)
+	testActor2.PostAndProcessMessage(f2, nil)
 
 	time.Sleep(time.Second)
 
@@ -78,13 +78,13 @@ func TestActorProcessingPower(t *testing.T) {
 
 	stopped := false
 	counter3 := 0
-	f3 := func(args ...interface{}) {
+	f3 := func(arg interface{}) {
 		counter3++
 	}
 
 	go func() {
 		for !stopped {
-			testActor3.PostAndProcessMessage(f3)
+			testActor3.PostAndProcessMessage(f3, nil)
 		}
 	}()
 
@@ -98,11 +98,11 @@ func TestActorSelfStop(t *testing.T) {
 	testActor := NewActor(false)
 	testActor.Start()
 
-	f := func(args ...interface{}) {
+	f := func(arg interface{}) {
 		testActor.StopLater()
 	}
 
-	testActor.PostAndProcessMessage(f)
+	testActor.PostAndProcessMessage(f, nil)
 
 	time.Sleep(time.Second)
 }
@@ -115,14 +115,14 @@ func TestActorTimer(t *testing.T) {
 
 	cnt := 0
 
-	f := func(args ...interface{}) bool {
+	f := func(arg interface{}) bool {
 		t.Logf("active timer time: %v", time.Now())
 		cnt++
 
 		return cnt >= 2 // timer 被激活 2 次后销毁
 	}
 
-	testActor.AddTimer(300, f)
+	testActor.AddTimer(300, f, nil)
 
 	time.Sleep(time.Second)
 }
@@ -133,8 +133,8 @@ func TestAddManyActorTimer(t *testing.T) {
 
 	currNum := int32(0)
 
-	f := func(args ...interface{}) bool {
-		curID := args[0].(int)
+	f := func(arg interface{}) bool {
+		curID := arg.(int)
 		if int(atomic.LoadInt32(&currNum)) != curID {
 			t.Errorf("actor timer active not in queue")
 		}
@@ -159,12 +159,12 @@ func TestRemoveActorTimer(t *testing.T) {
 
 	t.Logf("startTime: %v", time.Now())
 
-	f := func(args ...interface{}) bool {
+	f := func(arg interface{}) bool {
 		t.Errorf("the timer should be removed")
 		return false
 	}
 
-	timerID := testActor.AddTimer(1000, f)
+	timerID := testActor.AddTimer(1000, f, nil)
 
 	time.Sleep(time.Millisecond * 100)
 
@@ -179,19 +179,19 @@ func TestRemoveTimerInActor(t *testing.T) {
 
 	t.Logf("startTime: %v", time.Now())
 
-	f := func(args ...interface{}) bool {
+	f := func(arg interface{}) bool {
 		t.Errorf("the timer should be removed")
 		return false
 	}
 
-	timerID := testActor.AddTimer(1000, f)
+	timerID := testActor.AddTimer(1000, f, nil)
 
 	time.Sleep(time.Millisecond * 100)
 
 	testActor.PostAndProcessMessage(
-		func(args ...interface{}) {
+		func(arg interface{}) {
 			testActor.RemoveTimer(timerID)
-		})
+		}, nil)
 
 	time.Sleep(time.Second)
 }
@@ -200,7 +200,8 @@ func TestActorPostMsgWithArgs(t *testing.T) {
 	testActor := NewActor(false)
 	testActor.Start()
 
-	f := func(args ...interface{}) {
+	f := func(arg interface{}) {
+		args := arg.([]interface{})
 		if len(args) != 2 {
 			t.Error("invalid param cnt")
 		}
@@ -211,7 +212,7 @@ func TestActorPostMsgWithArgs(t *testing.T) {
 		t.Log(n, m)
 	}
 
-	testActor.PostAndProcessMessage(f, 10, 321)
+	testActor.PostAndProcessMessage(f, []int{10, 321})
 
 	time.Sleep(time.Millisecond * 100)
 }
@@ -281,13 +282,13 @@ func TestStartActorPanic(t *testing.T) {
 		t.Log(err)
 	}
 
-	f := func(args ...interface{}) {
+	f := func(arg interface{}) {
 		a := []int{0, 1, 2, 3}
 
 		fmt.Printf("%d", a[4])
 	}
 
-	testActor.PostAndProcessMessage(f)
+	testActor.PostAndProcessMessage(f, nil)
 
 	testActor.Stop()
 }

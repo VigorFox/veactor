@@ -21,7 +21,7 @@ var DefaultHandler = func(err interface{}) {
 }
 
 // TimerCB 定时器回调函数模板
-type TimerCB func(args ...interface{}) bool
+type TimerCB func(arg interface{}) bool
 
 // Timer 通用定时器对象
 type Timer struct {
@@ -29,7 +29,7 @@ type Timer struct {
 	Interval         time.Duration
 	LastActivateTime time.Time
 	CallBack         TimerCB
-	CallBackParam    []interface{}
+	CallBackParam    interface{}
 }
 
 // timerHeap 定时器实现所使用的堆结构
@@ -123,12 +123,12 @@ func (tl *timerList) Insert(timer *Timer) {
 }
 
 // ProcessMessageFunc 处理消息接口函数
-type ProcessMessageFunc func(...interface{})
+type ProcessMessageFunc func(interface{})
 
 // Message 消息结构
 type Message struct {
 	ProcessFunc ProcessMessageFunc
-	FuncArgs    []interface{}
+	FuncArg     interface{}
 }
 
 type IMessageProcessor interface {
@@ -142,7 +142,7 @@ type DefaultMessageProcessor struct {
 
 func (d *DefaultMessageProcessor) ProcessMessage(msg *Message) {
 	if msg != nil && msg.ProcessFunc != nil {
-		msg.ProcessFunc(msg.FuncArgs...)
+		msg.ProcessFunc(msg.FuncArg)
 	}
 }
 
@@ -206,7 +206,7 @@ func (a *Actor) GetGoroutineID() int64 {
 
 // AddTimer 添加定时器
 func (a *Actor) AddTimer(interval int, callback TimerCB,
-	callbackParam ...interface{}) int64 {
+	callbackParam interface{}) int64 {
 
 	timerID := atomic.AddInt64(&a.timerIDCounter, 1)
 
@@ -225,9 +225,9 @@ func (a *Actor) AddTimer(interval int, callback TimerCB,
 		addTimerFunc()
 	} else {
 		a.PostAndProcessMessage(
-			func(args ...interface{}) {
+			func(arg interface{}) {
 				addTimerFunc()
-			})
+			}, nil)
 	}
 
 	return timerID
@@ -249,9 +249,9 @@ func (a *Actor) RemoveTimer(timerID int64) {
 		delTimerFunc()
 	} else {
 		a.PostAndProcessMessage(
-			func(args ...interface{}) {
+			func(arg interface{}) {
 				delTimerFunc()
-			})
+			}, nil)
 	}
 }
 
@@ -265,7 +265,7 @@ func (a *Actor) checkTimers() {
 		}
 		var removeTimer bool
 		if timer.CallBack != nil {
-			removeTimer = timer.CallBack(timer.CallBackParam...)
+			removeTimer = timer.CallBack(timer.CallBackParam)
 		}
 		if removeTimer {
 			delete(a.tl.lookup, timer.ID)
@@ -414,7 +414,7 @@ func (a *Actor) cleanupSafe() {
 	}
 }
 
-func (a *Actor) PostAndProcessMessage(f ProcessMessageFunc, args ...interface{}) error {
+func (a *Actor) PostAndProcessMessage(f ProcessMessageFunc, arg interface{}) error {
 	if atomic.LoadUint32(&a.isRunnning) == 0 {
 		return fmt.Errorf("actor is not running, can not post message")
 	}
@@ -422,7 +422,7 @@ func (a *Actor) PostAndProcessMessage(f ProcessMessageFunc, args ...interface{})
 		return fmt.Errorf("actor is closing, can not post message")
 	}
 
-	msg := &Message{f, args}
+	msg := &Message{f, arg}
 	a.mailbox.Push(msg)
 
 	select {
