@@ -6,6 +6,7 @@ package actor
 import (
 	"container/heap"
 	"fmt"
+	"os"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -13,15 +14,15 @@ import (
 	"github.com/VigorFox/veactor/common/actor/queue/mpsc"
 	"github.com/VigorFox/veactor/common/runtime/stack"
 
-	"github.com/huandu/go-tls"
+	"github.com/rpccloud/goid"
 )
 
-var DefaultHandler = func(err interface{}) {
-	fmt.Printf("actor panic recovered: %s\n%s\n", err, stack.CallStack(3))
+var DefaultHandler = func(err any) {
+	fmt.Fprintf(os.Stderr, "actor panic recovered: %s\n%s\n", err, stack.CallStack(3))
 }
 
 // TimerCB 定时器回调函数模板
-type TimerCB func(arg interface{}) bool
+type TimerCB func(arg any) bool
 
 // Timer 通用定时器对象
 type Timer struct {
@@ -29,7 +30,7 @@ type Timer struct {
 	Interval         time.Duration
 	LastActivateTime time.Time
 	CallBack         TimerCB
-	CallBackParam    interface{}
+	CallBackParam    any
 }
 
 // timerHeap 定时器实现所使用的堆结构
@@ -62,7 +63,7 @@ func (th *timerHeap) Swap(i, j int) {
 // Push 向堆末尾追加元素。
 // 如果堆容量不足，创建一个原容量两倍的堆，把原堆元素拷贝到新堆，再添加新元素。
 // 堆排序接口实现
-func (th *timerHeap) Push(x interface{}) {
+func (th *timerHeap) Push(x any) {
 	if th == nil {
 		panic("timerHeap.Push Err: trying to access nil timerHeap pointer")
 	}
@@ -81,7 +82,7 @@ func (th *timerHeap) Push(x interface{}) {
 }
 
 // Pop 弹出一个元素，堆排序接口实现
-func (th *timerHeap) Pop() interface{} {
+func (th *timerHeap) Pop() any {
 	n := len(*th)
 	c := cap(*th)
 	if n < (c/4) && c > 25 {
@@ -123,12 +124,12 @@ func (tl *timerList) Insert(timer *Timer) {
 }
 
 // ProcessMessageFunc 处理消息接口函数
-type ProcessMessageFunc func(interface{})
+type ProcessMessageFunc func(any)
 
 // Message 消息结构
 type Message struct {
 	ProcessFunc ProcessMessageFunc
-	FuncArg     interface{}
+	FuncArg     any
 }
 
 type IMessageProcessor interface {
@@ -206,7 +207,7 @@ func (a *Actor) GetGoroutineID() int64 {
 
 // AddTimer 添加定时器
 func (a *Actor) AddTimer(interval int, callback TimerCB,
-	callbackParam interface{}) int64 {
+	callbackParam any) int64 {
 
 	timerID := atomic.AddInt64(&a.timerIDCounter, 1)
 
@@ -221,11 +222,11 @@ func (a *Actor) AddTimer(interval int, callback TimerCB,
 		a.tl.Insert(timer)
 	}
 
-	if a.GetGoroutineID() == tls.ID() {
+	if a.GetGoroutineID() == goid.GetRoutineId() {
 		addTimerFunc()
 	} else {
 		a.PostAndProcessMessage(
-			func(arg interface{}) {
+			func(arg any) {
 				addTimerFunc()
 			}, nil)
 	}
@@ -245,11 +246,11 @@ func (a *Actor) RemoveTimer(timerID int64) {
 		}
 	}
 
-	if a.GetGoroutineID() == tls.ID() {
+	if a.GetGoroutineID() == goid.GetRoutineId() {
 		delTimerFunc()
 	} else {
 		a.PostAndProcessMessage(
-			func(arg interface{}) {
+			func(arg any) {
 				delTimerFunc()
 			}, nil)
 	}
@@ -295,7 +296,7 @@ func (a *Actor) run() {
 		runtime.LockOSThread()
 	}
 
-	a.goroutineID = tls.ID()
+	a.goroutineID = goid.GetRoutineId()
 
 	popAndProcessAllMsg := func() {
 		hasGetTime := false
@@ -351,6 +352,12 @@ func (a *Actor) Start() error {
 }
 
 func (a *Actor) Stop() error {
+	// 假如侦测到是 actor 自身的 goroutine 调用本函数，直接调用 StopLater 函数，
+	// 避免因调用自身 channel 死锁
+	if a.GetGoroutineID() == goid.GetRoutineId() {
+		a.StopLater()
+		return nil
+	}
 	if atomic.LoadUint32(&a.isRunnning) == 0 {
 		return fmt.Errorf("actor is not running, can not stop actor")
 	}
@@ -414,7 +421,7 @@ func (a *Actor) cleanupSafe() {
 	}
 }
 
-func (a *Actor) PostAndProcessMessage(f ProcessMessageFunc, arg interface{}) error {
+func (a *Actor) PostAndProcessMessage(f ProcessMessageFunc, arg any) error {
 	if atomic.LoadUint32(&a.isRunnning) == 0 {
 		return fmt.Errorf("actor is not running, can not post message")
 	}

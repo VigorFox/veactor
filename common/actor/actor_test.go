@@ -2,10 +2,36 @@ package actor
 
 import (
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/rpccloud/goid"
 )
+
+func TestGetGoroutineID(t *testing.T) {
+	mu := sync.Mutex{}
+	goroutineIDmap := map[int64]int64{}
+
+	// for i := 0; i < 1000; i++ {
+	for i := 0; i < 5000000; i++ {
+		go func() {
+			goID := goid.GetRoutineId()
+			// t.Logf("Goroutine ID: %d", goID)
+			mu.Lock()
+			if _, exists := goroutineIDmap[goID]; !exists {
+				goroutineIDmap[goID] = goID
+			} else {
+				t.Errorf("Check Failed! Duplicated Goroutine ID: %d", goID)
+			}
+			mu.Unlock()
+		}()
+	}
+	time.Sleep(time.Second * 20)
+	goIDCnt := len(goroutineIDmap)
+	t.Logf("Goroutine ID Cnt: %d", goIDCnt)
+}
 
 func TestActorCreateAndStop(t *testing.T) {
 
@@ -17,7 +43,7 @@ func TestActorCreateAndStop(t *testing.T) {
 
 		msg := fmt.Sprintf("Actor %d is Running", i)
 		a.PostAndProcessMessage(
-			func(arg interface{}) {
+			func(arg any) {
 				t.Logf(msg)
 			}, nil)
 
@@ -42,7 +68,7 @@ func TestActorProcessingPower(t *testing.T) {
 	var f1 ProcessMessageFunc
 	var f2 ProcessMessageFunc
 	counter1 := 0
-	f1 = func(arg interface{}) {
+	f1 = func(arg any) {
 		counter1++
 		// 交叉投递消息
 		err := testActor2.PostAndProcessMessage(f2, nil)
@@ -52,7 +78,7 @@ func TestActorProcessingPower(t *testing.T) {
 	}
 
 	counter2 := 0
-	f2 = func(arg interface{}) {
+	f2 = func(arg any) {
 		counter2++
 		// 交叉投递消息
 		err := testActor1.PostAndProcessMessage(f1, nil)
@@ -78,7 +104,7 @@ func TestActorProcessingPower(t *testing.T) {
 
 	stopped := false
 	counter3 := 0
-	f3 := func(arg interface{}) {
+	f3 := func(arg any) {
 		counter3++
 	}
 
@@ -98,7 +124,7 @@ func TestActorSelfStop(t *testing.T) {
 	testActor := NewActor(false)
 	testActor.Start()
 
-	f := func(arg interface{}) {
+	f := func(arg any) {
 		testActor.StopLater()
 	}
 
@@ -115,7 +141,7 @@ func TestActorTimer(t *testing.T) {
 
 	cnt := 0
 
-	f := func(arg interface{}) bool {
+	f := func(arg any) bool {
 		t.Logf("active timer time: %v", time.Now())
 		cnt++
 
@@ -133,7 +159,7 @@ func TestAddManyActorTimer(t *testing.T) {
 
 	currNum := int32(0)
 
-	f := func(arg interface{}) bool {
+	f := func(arg any) bool {
 		curID := arg.(int)
 		if int(atomic.LoadInt32(&currNum)) != curID {
 			t.Errorf("actor timer active not in queue")
@@ -159,7 +185,7 @@ func TestRemoveActorTimer(t *testing.T) {
 
 	t.Logf("startTime: %v", time.Now())
 
-	f := func(arg interface{}) bool {
+	f := func(arg any) bool {
 		t.Errorf("the timer should be removed")
 		return false
 	}
@@ -179,7 +205,7 @@ func TestRemoveTimerInActor(t *testing.T) {
 
 	t.Logf("startTime: %v", time.Now())
 
-	f := func(arg interface{}) bool {
+	f := func(arg any) bool {
 		t.Errorf("the timer should be removed")
 		return false
 	}
@@ -189,7 +215,7 @@ func TestRemoveTimerInActor(t *testing.T) {
 	time.Sleep(time.Millisecond * 100)
 
 	testActor.PostAndProcessMessage(
-		func(arg interface{}) {
+		func(arg any) {
 			testActor.RemoveTimer(timerID)
 		}, nil)
 
@@ -200,8 +226,8 @@ func TestActorPostMsgWithArgs(t *testing.T) {
 	testActor := NewActor(false)
 	testActor.Start()
 
-	f := func(arg interface{}) {
-		args := arg.([]interface{})
+	f := func(arg any) {
+		args := arg.([]any)
 		if len(args) != 2 {
 			t.Error("invalid param cnt")
 		}
@@ -282,7 +308,7 @@ func TestStartActorPanic(t *testing.T) {
 		t.Log(err)
 	}
 
-	f := func(arg interface{}) {
+	f := func(arg any) {
 		a := []int{0, 1, 2, 3}
 
 		fmt.Printf("%d", a[4])

@@ -51,7 +51,7 @@ func TestQueue_PushPopOneProducer(t *testing.T) {
 		}
 	}()
 
-	var val interface{} = "foo"
+	var val any = "foo"
 
 	for i := 0; i < expCount; i++ {
 		q.Push(val)
@@ -136,7 +136,7 @@ func benchmarkPushPop(count, c int) {
 		}
 	}()
 
-	var val interface{} = "foo"
+	var val any = "foo"
 
 	for i := 0; i < c; i++ {
 		go func(n int) {
